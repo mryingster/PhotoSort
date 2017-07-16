@@ -8,7 +8,8 @@ supportedExtensions = [
     "raw",
     "aae",
     "avi",
-    "mov"
+    "mov",
+    "mp4"
 ]
 
 def getDateFromEXIF(image):
@@ -62,9 +63,6 @@ def main(argv):
         if os.path.isfile(i) and getExtension(i) in supportedExtensions:
             files.append(i)
         # TODO if os.path.isdir(i): add all subdirectories to files list
-
-    files.sort(key=lambda f: os.path.splitext(f)[1])
-    print files
 
     # Process Files
     for file in files:
