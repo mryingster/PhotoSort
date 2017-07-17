@@ -69,6 +69,27 @@ def getBaseName(path):
 def getFilenameWithoutExtension(path):
     return os.path.splitext(os.path.basename(path))[0]
 
+def checksumSha1(file):
+    import hashlib
+    BUF_SIZE = 65536  # Read 64kb chunks to reduce memory usage
+    sha1 = hashlib.sha1()
+
+    with open(file["path"], 'rb') as f:
+        while True:
+            data = f.read(BUF_SIZE)
+            if not data:
+                break
+
+            sha1.update(data)
+
+    return sha1.hexdigest()
+
+def createPar2File(file):
+    import subprocess
+    process = subprocess.Popen(["par2create", "-n1", file["path"]], stdout=subprocess.PIPE)
+    output, error = process.communicate()
+    return
+
 def moveFile(file):
     # Create new folder if destination doesn't exist
     if not os.path.exists(file["dest"]):
@@ -140,6 +161,7 @@ def main(argv):
     # Process Files - Determine destination, Move files
     for file in files:
         file.update({"dest" : destinationFromDate(file["date"])})
+        print file
         moveFile(file)
 
 if __name__ == "__main__":
