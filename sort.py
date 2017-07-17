@@ -124,11 +124,6 @@ def main(argv):
                 if os.path.isfile(path) or os.path.isdir(path) and recurse == True:
                     argv.append(path)
 
-    for file in files:
-        print file
-    print argv
-    quit()
-
     # If no files specified, exit
     if len(files) == 0:
         error("Please specify files to sort!")
