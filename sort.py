@@ -7,6 +7,7 @@ supportedExtensions = [
     "cr2",
     "raw",
     "aae",
+    "xmp",
     "avi",
     "mov",
     "mp4"
@@ -117,7 +118,6 @@ def main(argv):
 
         # Add all subdirectories to files list
         if os.path.isdir(i):
-            print i
             for file in os.listdir(i):
                 path = os.path.join(i, file)
                 # If we find a file, add to queue, if we are recursing, add directories too
