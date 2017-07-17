@@ -12,6 +12,23 @@ supportedExtensions = [
     "mp4"
 ]
 
+def help(name, version):
+    #     0        10        20        30        40        50        60        70        80
+    #     |---------|---------|---------|---------|---------|---------|---------|---------|
+    print("PhotoSort v%s" % version)
+    print("")
+    print("PhotoSort is a small utility that will sort supported filetypes by their ")
+    print("metadata or their OS specified creation date, and put them into hierarchal")
+    print("folders organized by year, month, and day.")
+    print("")
+    print("Usage")
+    print("    %s (options) (files/directories)" % name)
+    print("")
+    print("Options")
+    print("    -h   Show the help message")
+    print("    -r   Add files and folders recursively")
+    print("")
+
 def error(msg):
     print("ERROR: %s" % msg)
     quit(1)
@@ -75,9 +92,18 @@ def moveFile(file):
     return 0
 
 def main(argv):
+    version = 0.1
     files = []
+    recurse = False
 
-    # Process Arguments
+    # Process options
+    if "-h" in argv:
+        help(argv[0], version)
+        quit()
+    if "-r" in argv:
+        recurse = True
+
+    # Process Files and Directories in Arguments
     for i in argv:
         if os.path.isfile(i) and getExtension(i) in supportedExtensions:
             files.append({
@@ -89,8 +115,19 @@ def main(argv):
                 "dest" : ""
             })
 
-        # TODO -- add all subdirectories to files list
-        # if os.path.isdir(i):
+        # Add all subdirectories to files list
+        if os.path.isdir(i):
+            print i
+            for file in os.listdir(i):
+                path = os.path.join(i, file)
+                # If we find a file, add to queue, if we are recursing, add directories too
+                if os.path.isfile(path) or os.path.isdir(path) and recurse == True:
+                    argv.append(path)
+
+    for file in files:
+        print file
+    print argv
+    quit()
 
     # If no files specified, exit
     if len(files) == 0:
@@ -111,4 +148,4 @@ def main(argv):
         moveFile(file)
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main(sys.argv)
