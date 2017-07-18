@@ -34,6 +34,9 @@ def error(msg):
     print("ERROR: %s" % msg)
     quit(1)
 
+def warning(msg):
+    print("WARNING: %s" % msg)
+
 def getDateFromEXIF(image):
     import PIL.ExifTags
     import PIL.Image
@@ -69,12 +72,25 @@ def getBaseName(path):
 def getFilenameWithoutExtension(path):
     return os.path.splitext(os.path.basename(path))[0]
 
-def checksumSha1(file):
+def incrementName(file):
+    import re
+    newName = file["filename"]
+    if re.match('.*_\([0-9]+\)', newName):
+        oldName = re.compile('(.*)_\([0-9]+\)').sub(r'\1', newName)
+        number = int(re.compile('.*_\(([0-9]+)\)').sub(r'\1', newName))
+        newName = "%s_(%d)" % (oldName, number + 1)
+    else:
+        newName += "_(1)"
+
+    newName += "."+file["ext"]
+    return newName
+
+def checksumSha1(path):
     import hashlib
     BUF_SIZE = 65536  # Read 64kb chunks to reduce memory usage
     sha1 = hashlib.sha1()
 
-    with open(file["path"], 'rb') as f:
+    with open(path, 'rb') as f:
         while True:
             data = f.read(BUF_SIZE)
             if not data:
@@ -99,19 +115,15 @@ def moveFile(file):
 
     # Check for name collision. Error for now
     if os.path.exists(newFilePath):
-        print("'%s' already exists in '%s'" % (file["basename"], file["dest"]))
-        return -1
+        return 1, newFilePath
 
     # Move file
     try:
         os.rename(file["path"], newFilePath)
-        print("%s --> %s" % (file["path"], newFilePath))
-
     except:
-        print("Unable to move file '%s' to '%s'." % (file["basename"], file["dest"]))
-        return -1
+        return -1, newFilePath
 
-    return 0
+    return 0, newFilePath
 
 def main(argv):
     version = 0.1
@@ -161,8 +173,34 @@ def main(argv):
     # Process Files - Determine destination, Move files
     for file in files:
         file.update({"dest" : destinationFromDate(file["date"])})
-        print file
-        moveFile(file)
+
+        status = -1
+        while status != 0:
+            status, newFilePath = moveFile(file)
+
+            # General error
+            if status == -1:
+                warning("Unable to move file '%s' to '%s'." % (file["basename"], file["dest"]))
+                status = 0 # Skip to next file
+
+            # Success
+            if status == 0:
+                print("%s --> %s" % (file["path"], newFilePath))
+
+            # Name collision.
+            if status == 1:
+                # Check checksum
+                checksumA = checksumSha1(file["path"])
+                checksumB = checksumSha1(newFilePath)
+                # If checksums are same, skip file
+                if checksumA == checksumB:
+                    warning("Duplicate file, '%s'. Skipping..." % file["basename"])
+                    status = 0 # Skip to next file
+                # If checksums are different, rename file
+                else:
+                    newName = incrementName(file)
+                    warning("Duplicate filename, '%s'. Renaming to '%s'." % (file["basename"], newName))
+                    file.update({"basename" : newName})
 
 if __name__ == "__main__":
     main(sys.argv)

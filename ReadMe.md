@@ -13,5 +13,5 @@ sort.py (options) (files/directories)
 ## Todo ##
 * Create automatic checksumming or recovery files using par2 (or similar)
 * Associate related files (like img/mov files for Apple live photos, or aae files, etc.)
-* Rename files to prevent name collisions when moving
+
 
