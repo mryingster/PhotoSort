@@ -9,9 +9,13 @@ sort.py (options) (files/directories)
 ## Options ##
 -h   Show the help message
 -r   Add files and folders recursively
+-a   Create Par2 archive for each sorted file
+
+## Dependencies ##
+Par2 can be installed using brew
+`brew install par2`
 
 ## Todo ##
-* Create automatic checksumming or recovery files using par2 (or similar)
 * Associate related files (like img/mov files for Apple live photos, or aae files, etc.)
 
 

@@ -1,17 +1,8 @@
 #!/usr/bin/env python
 import sys, os, time
 
-supportedExtensions = [
-    "jpg",
-    "png",
-    "cr2",
-    "raw",
-    "aae",
-    "xmp",
-    "avi",
-    "mov",
-    "mp4"
-]
+supportedSortingExt = ["jpg", "png", "cr2", "raw", "aae", "xmp", "avi", "mov", "mp4"]
+supportedArchiveExt = ["jpg", "png", "cr2", "raw",               "avi", "mov", "mp4"]
 
 def help(name, version):
     #     0        10        20        30        40        50        60        70        80
@@ -28,6 +19,7 @@ def help(name, version):
     print("Options")
     print("    -h   Show the help message")
     print("    -r   Add files and folders recursively")
+    print("    -a   Archive media using Par2 after sorting")
     print("")
 
 def error(msg):
@@ -100,46 +92,63 @@ def checksumSha1(path):
 
     return sha1.hexdigest()
 
-def createPar2File(file):
+def checkPar2Install(prg="par2create"):
     import subprocess
-    process = subprocess.Popen(["par2create", "-n1", file["path"]], stdout=subprocess.PIPE)
+    process = subprocess.Popen(["which", prg], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     output, error = process.communicate()
-    return
+    return output != ''
 
-def moveFile(file):
-    # Create new folder if destination doesn't exist
-    if not os.path.exists(file["dest"]):
-        os.makedirs(file["dest"])
+def createPar2File(path):
+    import subprocess
+    process = subprocess.Popen(["par2create", "-n1", path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    output, error = process.communicate()
+    return error
 
-    newFilePath = os.path.join(file["dest"], file['basename'])
+def makeDirectory(path):
+    try:
+        # Create new folder if destination doesn't exist
+        if not os.path.exists(path):
+            os.makedirs(path)
+    except:
+        return 0
+    return 1
 
+def moveFile(oldPath, newPath):
     # Check for name collision. Error for now
-    if os.path.exists(newFilePath):
-        return 1, newFilePath
+    if os.path.exists(newPath):
+        return 1
 
     # Move file
     try:
-        os.rename(file["path"], newFilePath)
+        os.rename(oldPath, newPath)
     except:
-        return -1, newFilePath
+        return -1
 
-    return 0, newFilePath
+    return 0
 
 def main(argv):
     version = 0.1
     files = []
     recurse = False
+    archive = False
 
     # Process options
     if "-h" in argv:
         help(argv[0], version)
         quit()
+
     if "-r" in argv:
         recurse = True
 
+    if "-a" in argv:
+        if checkPar2Install():
+            archive = True
+        else:
+            warning("Unable to locate 'par2' executable. Please ensure it is installed correctly.")
+
     # Process Files and Directories in Arguments
     for i in argv:
-        if os.path.isfile(i) and getExtension(i) in supportedExtensions:
+        if os.path.isfile(i) and getExtension(i) in supportedSortingExt:
             files.append({
                 "path" : i,
                 "ext"  : getExtension(i),
@@ -173,10 +182,12 @@ def main(argv):
     # Process Files - Determine destination, Move files
     for file in files:
         file.update({"dest" : destinationFromDate(file["date"])})
-
+        makeDirectory(file["dest"])
         status = -1
         while status != 0:
-            status, newFilePath = moveFile(file)
+
+            file.update({"newpath" : os.path.join(file["dest"], file['basename'])})
+            status = moveFile(file["path"], file["newpath"])
 
             # General error
             if status == -1:
@@ -185,13 +196,15 @@ def main(argv):
 
             # Success
             if status == 0:
-                print("%s --> %s" % (file["path"], newFilePath))
+                if archive == True and file["ext"] in supportedArchiveExt:
+                    createPar2File(file["newpath"])
+                print("%s --> %s" % (file["path"], file["newpath"]))
 
             # Name collision.
             if status == 1:
                 # Check checksum
                 checksumA = checksumSha1(file["path"])
-                checksumB = checksumSha1(newFilePath)
+                checksumB = checksumSha1(file["newpath"])
                 # If checksums are same, skip file
                 if checksumA == checksumB:
                     warning("Duplicate file, '%s'. Skipping..." % file["basename"])
