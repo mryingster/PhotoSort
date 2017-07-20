@@ -29,6 +29,18 @@ def error(msg):
 def warning(msg):
     print("WARNING: %s" % msg)
 
+def getExtension(path):
+    return path.split(".")[-1].lower()
+
+def getBaseName(path):
+    return os.path.basename(path)
+
+def getFilenameWithoutExtension(path):
+    return os.path.splitext(os.path.basename(path))[0]
+
+def getPathWithoutFilename(path):
+    return os.path.dirname(path)
+
 def getDateFromEXIF(image):
     import PIL.ExifTags
     import PIL.Image
@@ -54,15 +66,6 @@ def getDateFromSystem(image):
 def destinationFromDate(date):
     dateArray = date.split(" ")[0].split(":")
     return "%s/%s/%s" % (int(dateArray[0]), int(dateArray[1]), int(dateArray[2]))
-
-def getExtension(path):
-    return path.split(".")[-1].lower()
-
-def getBaseName(path):
-    return os.path.basename(path)
-
-def getFilenameWithoutExtension(path):
-    return os.path.splitext(os.path.basename(path))[0]
 
 def incrementName(file):
     import re
@@ -150,12 +153,16 @@ def main(argv):
     for i in argv:
         if os.path.isfile(i) and getExtension(i) in supportedSortingExt:
             files.append({
-                "path" : i,
-                "ext"  : getExtension(i),
-                "filename" : getFilenameWithoutExtension(i),
-                "basename" : getBaseName(i),
-                "date" : "",
-                "dest" : ""
+                "old_path" : i,                              # sample/path/file.JPG
+                "old_dir"  : getPathWithoutFilename(i),      # sample/path/
+
+                "filename" : getFilenameWithoutExtension(i), # file
+                "basename" : getBaseName(i),                 # file.jpg
+                "ext"      : getExtension(i),                # jpg
+                "date"     : "",                             # 2000:12:21 22:56:17
+
+                "new_path" : "",                             # 2017/7/19/file.JPG
+                "new_dir"  : ""                              # 2017/7/19/
             })
 
         # Add all subdirectories to files list
@@ -172,39 +179,39 @@ def main(argv):
 
     # Process Files - Try getting date from EXIF data
     for file in files:
-        file.update({"date" : getDateFromEXIF(file["path"])})
+        file.update({"date" : getDateFromEXIF(file["old_path"])})
 
     # Process Files - If no EXIF available, use system date
     for file in files:
         if file["date"] == 0:
-            file.update({"date" : getDateFromSystem(file["path"])})
+            file.update({"date" : getDateFromSystem(file["old_path"])})
 
     # Process Files - Determine destination, Move files
     for file in files:
-        file.update({"dest" : destinationFromDate(file["date"])})
-        makeDirectory(file["dest"])
+        file.update({"new_dir" : destinationFromDate(file["date"])})
+        makeDirectory(file["new_dir"])
         status = -1
         while status != 0:
 
-            file.update({"newpath" : os.path.join(file["dest"], file['basename'])})
-            status = moveFile(file["path"], file["newpath"])
+            file.update({"new_path" : os.path.join(file["new_dir"], file['basename'])})
+            status = moveFile(file["old_path"], file["new_path"])
 
             # General error
             if status == -1:
-                warning("Unable to move file '%s' to '%s'." % (file["basename"], file["dest"]))
+                warning("Unable to move file '%s' to '%s'." % (file["basename"], file["new_dir"]))
                 status = 0 # Skip to next file
 
             # Success
             if status == 0:
                 if archive == True and file["ext"] in supportedArchiveExt:
-                    createPar2File(file["newpath"])
-                print("%s --> %s" % (file["path"], file["newpath"]))
+                    createPar2File(file["new_path"])
+                print("%s --> %s" % (file["old_path"], file["new_path"]))
 
             # Name collision.
             if status == 1:
                 # Check checksum
-                checksumA = checksumSha1(file["path"])
-                checksumB = checksumSha1(file["newpath"])
+                checksumA = checksumSha1(file["old_path"])
+                checksumB = checksumSha1(file["new_path"])
                 # If checksums are same, skip file
                 if checksumA == checksumB:
                     warning("Duplicate file, '%s'. Skipping..." % file["basename"])
