@@ -20,6 +20,7 @@ def help(name, version):
     print("    -h   Show the help message")
     print("    -r   Add files and folders recursively")
     print("    -a   Archive media using Par2 after sorting")
+    print("    -t   Test. Process files but don't do anything")
     print("")
 
 def error(msg):
@@ -119,21 +120,22 @@ def makeDirectory(path):
 def moveFile(oldPath, newPath):
     # Check for name collision. Error for now
     if os.path.exists(newPath):
-        return 1
+        return 0
 
     # Move file
     try:
         os.rename(oldPath, newPath)
     except:
-        return -1
+        return 0
 
-    return 0
+    return 1
 
 def main(argv):
     version = 0.1
     files = []
     recurse = False
     archive = False
+    debug = False
 
     # Process options
     if "-h" in argv:
@@ -142,6 +144,9 @@ def main(argv):
 
     if "-r" in argv:
         recurse = True
+
+    if "-t" in argv:
+        debug = True
 
     if "-a" in argv:
         if checkPar2Install():
@@ -186,41 +191,58 @@ def main(argv):
         if file["date"] == 0:
             file.update({"date" : getDateFromSystem(file["old_path"])})
 
-    # Process Files - Determine destination, Move files
+    # Process Files - Determine destination
     for file in files:
         file.update({"new_dir" : destinationFromDate(file["date"])})
-        makeDirectory(file["new_dir"])
-        status = -1
-        while status != 0:
 
+        while True:
             file.update({"new_path" : os.path.join(file["new_dir"], file['basename'])})
-            status = moveFile(file["old_path"], file["new_path"])
-
-            # General error
-            if status == -1:
-                warning("Unable to move file '%s' to '%s'." % (file["basename"], file["new_dir"]))
-                status = 0 # Skip to next file
-
-            # Success
-            if status == 0:
-                if archive == True and file["ext"] in supportedArchiveExt:
-                    createPar2File(file["new_path"])
-                print("%s --> %s" % (file["old_path"], file["new_path"]))
 
             # Name collision.
-            if status == 1:
+            if os.path.exists(file["new_path"]):
+
                 # Check checksum
                 checksumA = checksumSha1(file["old_path"])
                 checksumB = checksumSha1(file["new_path"])
+
                 # If checksums are same, skip file
                 if checksumA == checksumB:
+                    file.update({"new_path" : "SKIP"})
                     warning("Duplicate file, '%s'. Skipping..." % file["basename"])
-                    status = 0 # Skip to next file
+                    break
+
                 # If checksums are different, rename file
                 else:
                     newName = incrementName(file)
                     warning("Duplicate filename, '%s'. Renaming to '%s'." % (file["basename"], newName))
                     file.update({"basename" : newName})
+
+            # If destination is good, go to next file
+            else:
+                break
+
+    # Process files - Archive and Move files
+    for file in files:
+        status = 1
+
+        # Skip files
+        if file["new_path"] == "SKIP":
+             continue
+
+        # Only create archvies and move files if we are not in test/debug mode
+        if debug == False:
+            makeDirectory(file["new_dir"])
+            status = moveFile(file["old_path"], file["new_path"])
+            if archive == True and file["ext"] in supportedArchiveExt:
+                    createPar2File(file["new_path"])
+
+        # If we are good, print output
+        if status == 1:
+            print("%s --> %s" % (file["old_path"], file["new_path"]))
+
+        # Otherwise, error message
+        if status == 0:
+            warning("Unable to move file '%s' to '%s'." % (file["basename"], file["new_dir"]))
 
 if __name__ == "__main__":
     main(sys.argv)
