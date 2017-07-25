@@ -43,23 +43,22 @@ def getPathWithoutFilename(path):
     return os.path.dirname(path)
 
 def getDateFromEXIF(image):
-    import PIL.ExifTags
-    import PIL.Image
-
     try:
-        img = PIL.Image.open(image)
-        exif_data = img._getexif()
-
+        import exifread
     except:
-        return 0
+        error("Please install exifread using the command: pip install exifread")
+    date = 0
 
-    exif = {
-        PIL.ExifTags.TAGS[k]: v
-        for k, v in img._getexif().items()
-        if k in PIL.ExifTags.TAGS
-    }
+    # Open image
+    f = open(image, 'rb')
 
-    return exif["DateTimeOriginal"]
+    # Parse EXIF
+    exif = exifread.process_file(f)
+    for tag in ["DateTimeOriginal", "EXIF DateTimeOriginal"]:
+        if tag in exif:
+            date = str(exif[tag])
+
+    return date
 
 def getDateFromSystem(image):
     return time.strftime("%Y:%m:%d %H:%M:%S", time.strptime(time.ctime(os.path.getmtime(image))))
@@ -185,6 +184,17 @@ def main(argv):
     # Process Files - Try getting date from EXIF data
     for file in files:
         file.update({"date" : getDateFromEXIF(file["old_path"])})
+
+    # If we got date from EXIF (more reliable) look for associated files and assign same date
+    # Assuming associated file IF same name (minus extension) and same directory
+    for file1 in files:
+        if file1["date"] != 0:
+            for file2 in files:
+                if file1["old_dir"]  == file2["old_dir"]  and \
+                   file1["filename"] == file2["filename"] and \
+                   file1["ext"]      != file2["ext"]      and \
+                                        file2["date"] == 0:
+                    file2.update({"date" : file1["date"]})
 
     # Process Files - If no EXIF available, use system date
     for file in files:

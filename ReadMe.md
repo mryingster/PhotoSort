@@ -17,5 +17,6 @@ Par2 can be installed using brew
 
 ## Todo ##
 * Associate related files (like img/mov files for Apple live photos, or aae files, etc.)
-
+* To prevent clobbering, check for destination filename in array of files first as well as physical location
+* If files need to be renamed, associated files need to be renamed in same manner.
 
