@@ -29,6 +29,9 @@ def error(msg):
 
 def warning(msg):
     print("WARNING: %s" % msg)
+    return
+
+## Filename Functions ##
 
 def getExtension(path):
     return path.split(".")[-1].lower()
@@ -41,6 +44,8 @@ def getFilenameWithoutExtension(path):
 
 def getPathWithoutFilename(path):
     return os.path.dirname(path)
+
+## Date & EXIF Functions ##
 
 def getDateFromEXIF(image):
     try:
@@ -67,9 +72,11 @@ def destinationFromDate(date):
     dateArray = date.split(" ")[0].split(":")
     return "%s/%s/%s" % (int(dateArray[0]), int(dateArray[1]), int(dateArray[2]))
 
-def incrementName(file):
+## Filename Manipulation Functions ##
+
+def incrementName(filename, extension):
     import re
-    newName = file["filename"]
+    newName = getFilenameWithoutExtension(filename)
     if re.match('.*_\([0-9]+\)', newName):
         oldName = re.compile('(.*)_\([0-9]+\)').sub(r'\1', newName)
         number = int(re.compile('.*_\(([0-9]+)\)').sub(r'\1', newName))
@@ -77,8 +84,54 @@ def incrementName(file):
     else:
         newName += "_(1)"
 
-    newName += "."+file["ext"]
+    newName += "."+extension
     return newName
+
+def determineNewPath(file, files):
+    filename = file["basename"]
+    newPath = ""
+    validPathFound = False
+
+    while validPathFound == False:
+        validPathFound = True
+
+        # New path based on new directory and base name
+        newPath = os.path.join(file["new_dir"], filename)
+
+        # Create array of paths to compare against
+        pathsToCheck = []
+
+        # Add current file's destination path if there is a conflict
+        if os.path.exists(newPath):
+            pathsToCheck.append(newPath)
+
+        # Add all pending files who have same destination name
+        for fileToCheck in files:
+            if fileToCheck["new_path"] in ["SKIP", ""]: continue
+            if fileToCheck["old_path"] == file["old_path"]: break
+            if fileToCheck["new_path"] == newPath:
+                pathsToCheck.append(fileToCheck["old_path"])
+
+        # Check all paths in array
+        for pathToCheck in pathsToCheck:
+
+            # If checksums are same, skip file
+            if compareChecksum(file["old_path"], pathToCheck):
+                warning("Duplicate file, '%s'. Skipping..." % filename)
+                return "SKIP"
+
+            # If checksums are different, rename file
+            filename = incrementName(filename, file["ext"])
+            validPathFound = False
+            break
+
+    # See if we had to rename, and give warning
+    if filename != file["basename"]:
+        warning("Duplicate filename, '%s'. Renaming to '%s'." % (file["basename"], filename))
+
+    return newPath
+
+## Checksumming ##
 
 def checksumSha1(path):
     import hashlib
@@ -95,6 +148,13 @@ def checksumSha1(path):
 
     return sha1.hexdigest()
 
+def compareChecksum(path1, path2):
+    if checksumSha1(path1) == checksumSha1(path2):
+        return True
+    return False
+
+## PAR2 Functions ##
+
 def checkPar2Install(prg="par2create"):
     import subprocess
     process = subprocess.Popen(["which", prg], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -106,6 +166,8 @@ def createPar2File(path):
     process = subprocess.Popen(["par2create", "-n1", path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     output, error = process.communicate()
     return error
+
+## File Functions ##
 
 def makeDirectory(path):
     try:
@@ -128,6 +190,8 @@ def moveFile(oldPath, newPath):
         return 0
 
     return 1
+
+## Main Function ##
 
 def main(argv):
     version = 0.1
@@ -203,33 +267,9 @@ def main(argv):
 
     # Process Files - Determine destination
     for file in files:
+        # New directory based on date
         file.update({"new_dir" : destinationFromDate(file["date"])})
-
-        while True:
-            file.update({"new_path" : os.path.join(file["new_dir"], file['basename'])})
-
-            # Name collision.
-            if os.path.exists(file["new_path"]):
-
-                # Check checksum
-                checksumA = checksumSha1(file["old_path"])
-                checksumB = checksumSha1(file["new_path"])
-
-                # If checksums are same, skip file
-                if checksumA == checksumB:
-                    file.update({"new_path" : "SKIP"})
-                    warning("Duplicate file, '%s'. Skipping..." % file["basename"])
-                    break
-
-                # If checksums are different, rename file
-                else:
-                    newName = incrementName(file)
-                    warning("Duplicate filename, '%s'. Renaming to '%s'." % (file["basename"], newName))
-                    file.update({"basename" : newName})
-
-            # If destination is good, go to next file
-            else:
-                break
+        file.update({"new_path" : determineNewPath(file, files)})
 
     # Process files - Archive and Move files
     for file in files:
