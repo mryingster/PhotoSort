@@ -74,7 +74,7 @@ def destinationFromDate(date):
 
 ## Filename Manipulation Functions ##
 
-def incrementName(filename, extension):
+def incrementName(filename):
     import re
     newName = getFilenameWithoutExtension(filename)
     if re.match('.*_\([0-9]+\)', newName):
@@ -84,11 +84,15 @@ def incrementName(filename, extension):
     else:
         newName += "_(1)"
 
-    newName += "."+extension
     return newName
 
-def determineNewPath(file, files):
-    filename = file["basename"]
+def determineNewPath(file):
+    newPath = os.path.join(file["new_dir"], file["new_name"]+"."+file["ext"])
+    return newPath
+
+def determineNewNameAndPath(file, files):
+    filename = file["filename"]
+    basename = file["basename"]
     newPath = ""
     validPathFound = False
 
@@ -96,7 +100,7 @@ def determineNewPath(file, files):
         validPathFound = True
 
         # New path based on new directory and base name
-        newPath = os.path.join(file["new_dir"], filename)
+        newPath = os.path.join(file["new_dir"], basename)
 
         # Create array of paths to compare against
         pathsToCheck = []
@@ -118,18 +122,19 @@ def determineNewPath(file, files):
             # If checksums are same, skip file
             if compareChecksum(file["old_path"], pathToCheck):
                 warning("Duplicate file, '%s'. Skipping..." % filename)
-                return "SKIP"
+                return filename, "SKIP"
 
             # If checksums are different, rename file
-            filename = incrementName(filename, file["ext"])
+            filename = incrementName(filename)
+            basename = filename + "." + file["ext"]
             validPathFound = False
             break
 
     # See if we had to rename, and give warning
-    if filename != file["basename"]:
-        warning("Duplicate filename, '%s'. Renaming to '%s'." % (file["basename"], filename))
+    if filename != file["filename"]:
+        warning("Duplicate filename, '%s'. Renaming to '%s'." % (file["basename"], basename))
 
-    return newPath
+    return filename, newPath
 
 ## Checksumming ##
 
@@ -229,8 +234,11 @@ def main(argv):
                 "ext"      : getExtension(i),                # jpg
                 "date"     : "",                             # 2000:12:21 22:56:17
 
+                "new_name" : "",                             # New name if renamed because of naming conflict
                 "new_path" : "",                             # 2017/7/19/file.JPG
-                "new_dir"  : ""                              # 2017/7/19/
+                "new_dir"  : "",                             # 2017/7/19/
+
+                "associated" : []                            # List of indices of associated files
             })
 
         # Add all subdirectories to files list
@@ -258,7 +266,13 @@ def main(argv):
                    file1["filename"] == file2["filename"] and \
                    file1["ext"]      != file2["ext"]      and \
                                         file2["date"] == 0:
+
+                    # Add index of associated file to main file
+                    file1.update({"associated" : file1["associated"] + [files.index(file2)]})
+
+                    # Mark associated file so it doesn't get processed otherwise
                     file2.update({"date" : file1["date"]})
+                    file2.update({"new_path" : "SKIP"})
 
     # Process Files - If no EXIF available, use system date
     for file in files:
@@ -267,17 +281,29 @@ def main(argv):
 
     # Process Files - Determine destination
     for file in files:
+        # Skip certain files
+        if file["new_path"] == "SKIP" or file["new_name"] != "": continue
+
         # New directory based on date
         file.update({"new_dir" : destinationFromDate(file["date"])})
-        file.update({"new_path" : determineNewPath(file, files)})
+
+        # Look for naming conflicts and assign new path
+        newFilename, newPath = determineNewNameAndPath(file, files)
+        file.update({"new_name" : newFilename,
+                     "new_path" : newPath})
+
+        # If there are file associates, rename them accordingly
+        for associatedFileIndex in file["associated"]:
+            files[associatedFileIndex].update({"new_name" : file["new_name"],
+                                               "new_dir"  : file["new_dir"]})
+            files[associatedFileIndex].update({"new_path" : determineNewPath(files[associatedFileIndex])})
 
     # Process files - Archive and Move files
     for file in files:
         status = 1
 
         # Skip files
-        if file["new_path"] == "SKIP":
-             continue
+        if file["new_path"] == "SKIP": continue
 
         # Only create archvies and move files if we are not in test/debug mode
         if debug == False:
